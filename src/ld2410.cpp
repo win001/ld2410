@@ -161,9 +161,10 @@ bool ld2410::read() {
     
     // Restituisce true se sono stati letti nuovi dati o se un frame è stato processato
     return new_data || frame_processed;
+	// return read_frame_no_buffer_();
 }
 
-
+/*
 void ld2410::taskFunction(void* param) {
     ld2410* sensor = static_cast<ld2410*>(param);
     for (;;) {
@@ -196,7 +197,7 @@ void ld2410::autoReadTask(uint32_t stack, uint32_t priority, uint32_t core) {
         core
     );
 }
-
+*/
 
 bool ld2410::presenceDetected()
 {
@@ -359,18 +360,20 @@ bool ld2410::parse_data_frame_() {
         radar_data_frame_[17] == 0x55 && radar_data_frame_[18] == 0x00) {
 
         target_type_ = radar_data_frame_[8];
-
         // Estrai distanze e energie dei bersagli
-        stationary_target_distance_ = *(uint16_t*)(&radar_data_frame_[9]);
-        moving_target_distance_ = *(uint16_t*)(&radar_data_frame_[15]);
+        // stationary_target_distance_ = *(uint16_t*)(&radar_data_frame_[9]);
+        stationary_target_distance_ = (uint16_t)(radar_data_frame_[9] | (radar_data_frame_[10] << 8));
+        // moving_target_distance_ = *(uint16_t*)(&radar_data_frame_[15]);
+        moving_target_distance_ = (uint16_t)(radar_data_frame_[15] | (radar_data_frame_[16] << 8));
         stationary_target_energy_ = radar_data_frame_[14];
         moving_target_energy_ = radar_data_frame_[11];
 
         last_valid_frame_length = radar_data_frame_position_;  // Aggiunto per tracciare la lunghezza del frame
         radar_uart_last_packet_ = millis();  // Aggiorna il timestamp dell'ultimo pacchetto
+		if(debug_uart_ != nullptr) debug_uart_->println(F("Parse_data_frame_..... SUCCESSFULL"));
         return true;
     }
-
+	if(debug_uart_ != nullptr) debug_uart_->println(F("Parse_data_frame_..... FAILED"));
     return false;  // Frame non valido
 }
 
@@ -727,10 +730,12 @@ bool ld2410::enter_configuration_mode_()
 		{
 			if(latest_ack_ == 0xFF && latest_command_success_)
 			{
+				if(debug_uart_ != nullptr) debug_uart_->println(F("enter_configuration_mode_() : SUCESSFULL"));
 				return true;
 			}
 		}
 	}
+	if(debug_uart_ != nullptr) debug_uart_->println(F("enter_configuration_mode_() : FAILED"));
 	return false;
 }
 
@@ -750,10 +755,12 @@ bool ld2410::leave_configuration_mode_()
 		{
 			if(latest_ack_ == 0xFE && latest_command_success_)
 			{
+				if(debug_uart_ != nullptr) debug_uart_->println(F("leave_configuration_mode_() : SUCESSFULL"));
 				return true;
 			}
 		}
 	}
+	if(debug_uart_ != nullptr) debug_uart_->println(F("leave_configuration_mode_() : FAILED"));
 	return false;
 }
 
@@ -894,7 +901,9 @@ bool ld2410::read_frame_no_buffer_() {
                         radar_data_frame_[radar_data_frame_position_ - 2] == 0xF6 &&
                         radar_data_frame_[radar_data_frame_position_ - 1] == 0xF5)
                     {
+						if(debug_uart_ != nullptr) debug_uart_->println(F("Lets process Data ..1"));
                         if(parse_data_frame_()) {
+							if(debug_uart_ != nullptr) debug_uart_->println(F("Lets process Data ..2"));
                             frame_started_ = false;
                             radar_data_frame_position_ = 0;
                             return true;
@@ -914,7 +923,9 @@ bool ld2410::read_frame_no_buffer_() {
                             radar_data_frame_[radar_data_frame_position_ - 2] == 0x02 &&
                             radar_data_frame_[radar_data_frame_position_ - 1] == 0x01)
                     {
+						if(debug_uart_ != nullptr) debug_uart_->println(F("Lets process Command ..1"));
                         if(parse_command_frame_()) {
+							if(debug_uart_ != nullptr) debug_uart_->println(F("Lets process Command ..2"));
                             frame_started_ = false;
                             radar_data_frame_position_ = 0;
                             return true;
@@ -1059,8 +1070,13 @@ bool ld2410::setGateSensitivityThreshold(uint8_t gate, uint8_t moving, uint8_t s
 		radar_uart_->write((byte) 0x00);
 		radar_uart_->write((byte) 0x00);	//Gate command
 		radar_uart_->write((byte) 0x00);
-		radar_uart_->write(char(gate));	//Gate value
-		radar_uart_->write((byte) 0x00);
+		if(gate == 255) {
+			radar_uart_->write((byte) 0xFF);
+			radar_uart_->write((byte) 0xFF);
+		} else {
+			radar_uart_->write(char(gate));	//Gate value
+			radar_uart_->write((byte) 0x00);
+		}
 		radar_uart_->write((byte) 0x00);	//Spacer
 		radar_uart_->write((byte) 0x00);
 		radar_uart_->write((byte) 0x01);	//Motion sensitivity command
